@@ -1,0 +1,39 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "KABU",
+      "hasCanvas": true,
+      "bodyTextLen": 1230,
+      "bodyTextHash": "38981a57557c6e0e2dd6f0b82f96a5eb1840e2875ef74fcc40a9ca8a65574627",
+      "bodyTextPrefix": "KABU 株・海外・投信のチャート LIVE 5秒 15秒 30秒 01:21:31 通知 ログイン カスタム ウォッチ 8 銘",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "KABU",
+      "hasCanvas": true,
+      "bodyTextLen": 1891,
+      "bodyTextHash": "9e580e1829df7ed57a44394af914b401ef653f313a37ac3b6884f6edef9d769e",
+      "bodyTextPrefix": "KABU LIVE 通知 ログイン カスタム ウォッチ 8 銘柄 · 無制限 7203.T トヨタ自動車 日本株 2,555 -",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [
+    "BRAND WARNING: this looks like a game/canvas app but src/lib/og/site.json is missing \"type\": \"x:game\". X uses og:type=x:game to present the unfurl as a game card — set it in /workspace/src/lib/og/site.json per /workspace/.grok/skills/og/SKILL.md. Do not invent x:type or overload twitter:card as the game signal.",
+    "BRAND WARNING: this looks like a game/canvas app but /workspace/public/x-banner.jpg is missing. Games need a 50:11 X feed card (1200×264 JPEG) at public/x-banner.jpg — open /workspace/.grok/skills/og/SKILL.md and finish the brand-asset pass."
+  ],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
