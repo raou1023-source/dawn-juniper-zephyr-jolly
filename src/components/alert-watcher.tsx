@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { translate } from "@/lib/i18n";
+import { stripTags } from "@/lib/safe";
 import { isBigMoveNews, type NewsItem } from "@/lib/stocks/news";
 import type { QuoteMeta } from "@/lib/stocks/types";
 import { useDesk } from "@/stores/desk";
@@ -76,7 +77,7 @@ function notifyBrowser(enabled: boolean, title: string, body: string) {
   if (!enabled || typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
   try {
-    new Notification(title, { body });
+    new Notification(stripTags(title).slice(0, 80), { body: stripTags(body).slice(0, 140) });
   } catch {
     /* iframe / denied */
   }

@@ -76,8 +76,11 @@ export function PriceChart({
       : "transparent";
     const border = ink ? "#2a2e36" : "#d7d2c8";
 
+    const size = host.getBoundingClientRect();
     const fmt = scaleFormat(symbol, currency);
     const chart = createChart(host, {
+      width: Math.max(1, Math.floor(size.width)),
+      height: Math.max(1, Math.floor(size.height)),
       layout: {
         background: { color: bg },
         textColor: text,

@@ -29,13 +29,14 @@ export const searchSymbols = createServerFn({ method: "GET" })
   });
 
 export const getQuotes = createServerFn({ method: "GET" })
-  .validator(z.object({ symbols: z.string().max(800) }))
+  .validator(z.object({ symbols: z.string().max(4000) }))
   .handler(async ({ data }) => {
     const { fetchYahooQuotes } = await import("./yahoo.server");
     const symbols = data.symbols
       .split(",")
       .map((s) => safeSymbol(s))
-      .filter((s): s is string => Boolean(s));
+      .filter((s): s is string => Boolean(s))
+      .slice(0, 80);
     return fetchYahooQuotes(symbols);
   });
 
@@ -57,9 +58,10 @@ export const getNews = createServerFn({ method: "GET" })
       rows.map((row) => row.title),
       locale,
     );
+    const { stripTags } = await import("@/lib/safe");
     return rows.map((row, i) => ({
       ...row,
-      title: titles[i] || row.title,
+      title: stripTags(titles[i] || row.title).slice(0, 180),
     }));
   });
 

@@ -11,8 +11,21 @@ import { useT } from "@/lib/use-t";
 import { useDesk } from "@/stores/desk";
 import { cn } from "@/lib/utils";
 
+function snapshot(
+  name: string,
+  items: { symbol: string; name: string }[],
+  selected: string,
+) {
+  return JSON.stringify({
+    name,
+    selected,
+    items: items.map((w) => `${w.symbol}:${w.name}`),
+  });
+}
+
 export function WatchlistSync() {
   const { user, isPending } = useCurrentUserState();
+  const userId = user?.id ?? "";
   const watchlist = useDesk((s) => s.watchlist);
   const selected = useDesk((s) => s.selected);
   const listId = useDesk((s) => s.listId);
@@ -23,16 +36,17 @@ export function WatchlistSync() {
   const [lists, setLists] = useState<SavedList[]>([]);
   const [nameDraft, setNameDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("この端末に保存");
+  const [status, setStatus] = useState("");
   const boot = useRef(false);
   const skip = useRef(false);
   const restored = useRef(false);
+  const last = useRef("");
 
   useEffect(() => {
-    if (isPending || !user) {
+    if (isPending || !userId) {
       boot.current = false;
       setLists([]);
-      setStatus(t("savedLocal"));
+      setStatus((s) => (s === t("savedLocal") ? s : t("savedLocal")));
       return;
     }
     let cancelled = false;
@@ -41,8 +55,7 @@ export function WatchlistSync() {
         if (cancelled) return;
         setLists(rows);
         const current = useDesk.getState();
-        const match =
-          rows.find((r) => r.id === current.listId) ?? rows[0];
+        const match = rows.find((r) => r.id === current.listId) ?? rows[0];
         if (match) {
           skip.current = true;
           if (!restored.current) {
@@ -53,10 +66,11 @@ export function WatchlistSync() {
                 : match.selected;
             replaceWatchlist(match.items, keep);
           }
-          setListMeta(match.id, match.name);
-          setStatus(`${match.name} を同期`);
-        } else {
-          void persist("メイン", current.watchlist, current.selected);
+          if (current.listId !== match.id || current.listName !== match.name) {
+            setListMeta(match.id, match.name);
+          }
+          last.current = snapshot(match.name, match.items, match.selected);
+          setStatus(t("savedCloud"));
         }
         boot.current = true;
       })
@@ -66,55 +80,67 @@ export function WatchlistSync() {
     return () => {
       cancelled = true;
     };
-  }, [user, isPending, replaceWatchlist, setListMeta]);
+  }, [userId, isPending, replaceWatchlist, setListMeta, t]);
 
   useEffect(() => {
-    if (!user || !boot.current) return;
+    if (!userId || !boot.current) return;
     if (skip.current) {
       skip.current = false;
       return;
     }
+    const stamp = snapshot(listName || "メイン", watchlist, selected);
+    if (stamp === last.current) return;
     const handle = window.setTimeout(() => {
-      void persist(listName || "メイン", watchlist, selected, listId ?? undefined);
-    }, 800);
+      void persist(listName || "メイン", watchlist, selected, listId ?? undefined, true);
+    }, 2500);
     return () => window.clearTimeout(handle);
-  }, [user, watchlist, selected, listId, listName]);
+  }, [userId, watchlist, selected, listId, listName]);
 
   async function persist(
     name: string,
     items: typeof watchlist,
     sel: string,
     id?: string,
+    silent = false,
   ) {
     if (!items.length) return;
-    setBusy(true);
+    const stamp = snapshot(name, items, sel);
+    if (silent && stamp === last.current) return;
+    if (!silent) setBusy(true);
     try {
       const saved = await saveWatchlist({
         data: { id, name, items, selected: sel },
       });
-      setListMeta(saved.id, name);
+      last.current = stamp;
+      const current = useDesk.getState();
+      if (current.listId !== saved.id || current.listName !== name) {
+        skip.current = true;
+        setListMeta(saved.id, name);
+      }
       const rows = await listWatchlists();
       setLists(rows);
       setStatus(t("savedCloud"));
     } catch {
       setStatus(t("saveFail"));
     } finally {
-      setBusy(false);
+      if (!silent) setBusy(false);
     }
   }
 
   async function saveAs() {
     const name = nameDraft.trim() || `リスト ${lists.length + 1}`;
     setNameDraft("");
-    await persist(name, watchlist, selected);
+    last.current = "";
+    await persist(name, watchlist, selected, undefined, false);
     toast("リストを保存しました", { description: name });
   }
 
   async function load(row: SavedList) {
     skip.current = true;
+    last.current = snapshot(row.name, row.items, row.selected);
     replaceWatchlist(row.items, row.selected);
     setListMeta(row.id, row.name);
-    setStatus(`${row.name} を表示`);
+    setStatus(t("savedCloud"));
   }
 
   async function remove(id: string) {
@@ -133,21 +159,13 @@ export function WatchlistSync() {
     }
   }
 
-  if (isPending || !user) {
-    return (
-      <section className="border-t border-border px-3 py-3">
-        <p className="text-[11px] tracking-wide text-faint uppercase">{t("save")}</p>
-        <p className="mt-1 text-[11px] text-muted">{t("savedLocal")}</p>
-        <p className="mt-2 text-[11px] text-faint">{t("saveHint")}</p>
-      </section>
-    );
-  }
-
   return (
-    <section className="border-t border-border px-3 py-3">
-      <p className="text-[11px] tracking-wide text-faint uppercase">{t("save")}</p>
-      <p className="mt-1 text-[11px] text-muted">{busy ? t("saving") : status}</p>
-      {user ? (
+    <section className="shrink-0 border-b border-border px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-muted">{busy ? t("saving") : status || t("savedLocal")}</p>
+        <p className="text-[10px] text-faint">{t("save")}</p>
+      </div>
+      {userId ? (
         <>
           <div className="mt-2 flex gap-1">
             <input
@@ -159,37 +177,39 @@ export function WatchlistSync() {
             <button
               type="button"
               onClick={() => void saveAs()}
-              className="h-8 rounded-md bg-accent px-2 text-[11px] text-accent-fg"
+              className="h-8 shrink-0 rounded-md bg-accent px-2 text-[11px] text-accent-fg"
             >
               {t("saveAs")}
             </button>
           </div>
-          <ul className="mt-2 flex flex-col gap-1">
-            {lists.map((row) => (
-              <li key={row.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => void load(row)}
-                  className={cn(
-                    "h-8 min-w-0 flex-1 truncate rounded-md px-2 text-left text-xs",
-                    row.id === listId ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
-                  )}
-                >
-                  {row.name} · {row.items.length}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void remove(row.id)}
-                  className="h-8 rounded-md px-2 text-[11px] text-faint hover:text-down"
-                >
-                  {t("delete")}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {lists.length > 0 ? (
+            <ul className="mt-2 flex max-h-20 flex-col gap-1 overflow-y-auto">
+              {lists.map((row) => (
+                <li key={row.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void load(row)}
+                    className={cn(
+                      "h-7 min-w-0 flex-1 truncate rounded-md px-2 text-left text-xs",
+                      row.id === listId ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
+                    )}
+                  >
+                    {row.name} · {row.items.length}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void remove(row.id)}
+                    className="h-7 rounded-md px-2 text-[11px] text-faint hover:text-down"
+                  >
+                    {t("delete")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </>
       ) : (
-        <p className="mt-2 text-[11px] text-faint">{t("saveHint")}</p>
+        <p className="mt-1 text-[11px] text-faint">{t("saveHint")}</p>
       )}
     </section>
   );

@@ -72,7 +72,7 @@ export const CATALOG: CatalogItem[] = [
   { symbol: "VTI", name: "Vanguard Total Stock Market", exchange: "ARCA", kind: "etf", type: "ETF" },
   { symbol: "VWO", name: "Vanguard Emerging Markets", exchange: "ARCA", kind: "etf", type: "ETF" },
   { symbol: "VEA", name: "Vanguard FTSE Developed Markets", exchange: "ARCA", kind: "etf", type: "ETF" },
-  { symbol: "GLD", name: "SPDR Gold Shares", exchange: "ARCA", kind: "etf", type: "ETF", aliases: ["金"] },
+  { symbol: "GLD", name: "SPDR Gold Shares", exchange: "ARCA", kind: "etf", type: "ETF", aliases: ["金ETF"] },
   { symbol: "TLT", name: "iShares 20+ Year Treasury", exchange: "NASDAQ", kind: "bond", type: "ETF" },
   { symbol: "SCHD", name: "Schwab US Dividend Equity", exchange: "ARCA", kind: "etf", type: "ETF" },
   { symbol: "VWRL.L", name: "Vanguard FTSE All-World", exchange: "LSE", kind: "etf", type: "ETF" },
@@ -105,7 +105,7 @@ export const CATALOG: CatalogItem[] = [
   { symbol: "^GDAXI", name: "DAX", exchange: "XETRA", kind: "index", type: "指数" },
   { symbol: "^HSI", name: "ハンセン指数", exchange: "香港", kind: "index", type: "指数" },
 
-  { symbol: "GC=F", name: "金先物", exchange: "COMEX", kind: "commodity", type: "商品", aliases: ["ゴールド", "gold"] },
+  { symbol: "GC=F", name: "金先物", exchange: "COMEX", kind: "commodity", type: "商品", aliases: ["金", "ゴールド", "gold"] },
   { symbol: "SI=F", name: "銀先物", exchange: "COMEX", kind: "commodity", type: "商品", aliases: ["シルバー", "silver"] },
   { symbol: "PL=F", name: "プラチナ先物", exchange: "NYMEX", kind: "commodity", type: "商品", aliases: ["白金", "platinum"] },
   { symbol: "PA=F", name: "パラジウム先物", exchange: "NYMEX", kind: "commodity", type: "商品" },
@@ -357,7 +357,7 @@ export function searchCatalog(query: string, kind?: AssetKind | "all"): CatalogI
     .slice(0, 24);
 }
 
-export function mergeHits(live: SearchHit[], local: CatalogItem[]): SearchHit[] {
+export function mergeHits(live: SearchHit[], local: CatalogItem[], query = ""): SearchHit[] {
   const map = new Map<string, SearchHit>();
   for (const row of local) map.set(row.symbol.toUpperCase(), row);
   for (const row of live) {
@@ -366,20 +366,29 @@ export function mergeHits(live: SearchHit[], local: CatalogItem[]): SearchHit[] 
     map.set(key, {
       ...prev,
       ...row,
-      kind: row.kind ?? prev?.kind ?? classify(row.symbol, row.type, row.exchange),
+      kind: prev?.kind ?? row.kind ?? classify(row.symbol, row.type, row.exchange),
       name: prev?.name && /[ぁ-んァ-ン一-龥]/.test(prev.name) ? prev.name : row.name,
     });
   }
+  const q = query.trim().toLowerCase();
   return [...map.values()]
-    .sort((a, b) => searchRank(a) - searchRank(b))
+    .sort((a, b) => searchRank(a, q) - searchRank(b, q))
     .slice(0, 24);
 }
 
-function searchRank(hit: SearchHit) {
+function searchRank(hit: SearchHit, q: string) {
   const s = hit.symbol.toUpperCase();
+  const name = hit.name.toLowerCase();
+  const aliases = (lookupCatalog(hit.symbol)?.aliases ?? []).map((a) => a.toLowerCase());
+  if (q) {
+    if (s.toLowerCase() === q || name === q || aliases.includes(q)) return 0;
+    if (q.length >= 2 && (s.toLowerCase().startsWith(q) || aliases.some((a) => a.startsWith(q)))) return 1;
+    if (name.includes(q) || aliases.some((a) => a.includes(q))) return q.length >= 2 ? 2 : 5;
+  }
   const x = (hit.exchange ?? "").toLowerCase();
-  if (s.endsWith(".T") || x.includes("東京") || x.includes("tokyo") || x.includes("jpx")) return 0;
-  if (!s.includes(".") && (x.includes("nasdaq") || x.includes("nyse") || x.includes("arca"))) return 1;
-  if (s.endsWith(".HK")) return 2;
-  return 4;
+  if (hit.kind === "fx" || hit.kind === "crypto" || hit.kind === "commodity") return 3;
+  if (s.endsWith(".T") || x.includes("東京") || x.includes("tokyo") || x.includes("jpx")) return 4;
+  if (!s.includes(".") && (x.includes("nasdaq") || x.includes("nyse") || x.includes("arca"))) return 5;
+  if (s.endsWith(".HK")) return 6;
+  return 8;
 }

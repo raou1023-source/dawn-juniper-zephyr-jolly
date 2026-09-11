@@ -38,25 +38,23 @@ export function FundamentalsPanel({ symbol, currency = "", week52High, week52Low
   ];
 
   return (
-    <section className="shrink-0 border-t border-border bg-bg pb-3">
+    <section className="shrink-0 border-t border-border bg-bg">
       <div className="flex items-center justify-between px-4 pt-2 md:px-6">
         <p className="text-[11px] tracking-wide text-faint uppercase">{t("company")}</p>
       </div>
       {q.isLoading && !data ? (
         <p className="px-4 py-2 text-xs text-muted md:px-6">{t("newsLoading")}</p>
       ) : (
-        <div className="overflow-x-auto overscroll-x-contain px-4 pb-2 md:px-6">
-          <dl className="flex min-w-max gap-4">
-            {cells.map((cell) => (
-              <div key={cell.key} className="min-w-24 shrink-0 py-1">
-                <dt className="text-[10px] text-faint">
-                  <TermHint label={t(cell.key)} hint={t(`${cell.key}Hint` as MsgKey)} />
-                </dt>
-                <dd className="font-mono text-sm tabular-nums text-fg">{cell.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+        <dl className="grid grid-cols-3 gap-x-3 gap-y-1.5 px-4 py-2 sm:grid-cols-5 md:px-6">
+          {cells.map((cell) => (
+            <div key={cell.key} className="min-w-0">
+              <dt className="text-[10px] text-faint">
+                <TermHint label={t(cell.key)} hint={t(`${cell.key}Hint` as MsgKey)} />
+              </dt>
+              <dd className="truncate font-mono text-sm tabular-nums text-fg">{cell.value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
     </section>
   );

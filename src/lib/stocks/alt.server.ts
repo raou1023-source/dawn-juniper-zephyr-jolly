@@ -1,4 +1,5 @@
 import { lookupCatalog } from "./catalog";
+import { outbound } from "./outbound";
 import { sanitizeCandles } from "./ohlc";
 import type { Candle, ChartPayload, QuoteMeta } from "./types";
 
@@ -24,14 +25,10 @@ async function getText(url: string): Promise<string> {
 }
 
 async function safeFetch(url: string, accept: string, timeout: number) {
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || !HOSTS.has(parsed.hostname)) {
-    throw new Error("blocked");
-  }
-  const res = await fetch(parsed.href, {
+  const res = await outbound(url, HOSTS, {
     headers: { "User-Agent": UA, Accept: accept },
+    timeout,
     redirect: "error",
-    signal: AbortSignal.timeout(timeout),
   });
   if (!res.ok) throw new Error(`alt ${res.status}`);
   return res;

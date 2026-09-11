@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getNews } from "@/lib/stocks/api";
 import type { NewsItem } from "@/lib/stocks/news";
-import { safeHttpUrl } from "@/lib/safe";
+import { safeNewsUrl } from "@/lib/safe";
 import { LOCALE_BCP } from "@/lib/i18n";
 import { useLocale, useT } from "@/lib/use-t";
 import { cn } from "@/lib/utils";
@@ -82,7 +82,7 @@ function NewsGroup({
       ) : (
         <ul className="flex flex-col gap-1">
           {items
-            .filter((item) => safeHttpUrl(item.url))
+            .filter((item) => safeNewsUrl(item.url))
             .slice(0, 6)
             .map((item) => (
               <li key={item.id}>

@@ -1,5 +1,6 @@
+import { outbound } from "./outbound";
 import { CATALOG, type CatalogItem } from "./catalog";
-import { safeHttpUrl, stripTags } from "@/lib/safe";
+import { safeNewsUrl, stripTags } from "@/lib/safe";
 import {
   isFinanceTitle,
   isNoiseTitle,
@@ -7,8 +8,12 @@ import {
   type NewsItem,
 } from "./news";
 
-const UA =
-  "Mozilla/5.0 (compatible; KabuDesk/1.0; +https://grok.com) AppleWebKit/537.36";
+const NEWS_HOSTS = new Set([
+  "query1.finance.yahoo.com",
+  "query2.finance.yahoo.com",
+  "feeds.finance.yahoo.com",
+  "news.yahoo.co.jp",
+]);
 
 type YahooSearchNews = {
   news?: Array<{
@@ -122,16 +127,16 @@ async function searchNews(query: string): Promise<NewsItem[]> {
   const url =
     `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}` +
     `&quotesCount=0&newsCount=12&listsCount=0&enableFuzzyQuery=false`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "application/json" },
-    signal: AbortSignal.timeout(8000),
+  const res = await outbound(url, NEWS_HOSTS, {
+    headers: { "User-Agent": "KabuDesk/1.0", Accept: "application/json" },
+    timeout: 8000,
   });
   if (!res.ok) throw new Error(`news ${res.status}`);
   const json = (await res.json()) as YahooSearchNews;
   const out: NewsItem[] = [];
   for (const row of json.news ?? []) {
     if (!row.title || !row.link) continue;
-    const url = safeHttpUrl(row.link);
+    const url = safeNewsUrl(row.link);
     if (!url) continue;
     out.push({
       id: row.uuid || url,
@@ -162,9 +167,12 @@ async function rssBusinessJp(): Promise<NewsItem[]> {
 }
 
 async function fetchText(url: string) {
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "application/rss+xml, application/xml, text/xml" },
-    signal: AbortSignal.timeout(8000),
+  const res = await outbound(url, NEWS_HOSTS, {
+    headers: {
+      "User-Agent": "KabuDesk/1.0",
+      Accept: "application/rss+xml, application/xml, text/xml",
+    },
+    timeout: 8000,
   });
   if (!res.ok) throw new Error(`rss ${res.status}`);
   return res.text();
@@ -175,7 +183,7 @@ function parseRss(xml: string, source: string, symbols: string[]): NewsItem[] {
   const out: NewsItem[] = [];
   for (const block of blocks) {
     const title = cleanTitle(decode(tag(block, "title")));
-    const link = safeHttpUrl(decode(tag(block, "link") || tag(block, "guid")));
+    const link = safeNewsUrl(decode(tag(block, "link") || tag(block, "guid")));
     if (!title || !link) continue;
     const pub = tag(block, "pubDate");
     const publishedAt = pub ? Date.parse(pub) || Date.now() : Date.now();

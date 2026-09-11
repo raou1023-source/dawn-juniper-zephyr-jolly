@@ -1,3 +1,6 @@
+import { outbound } from "./outbound";
+import { stripTags } from "@/lib/safe";
+
 const cache = new Map<string, string>();
 
 const TARGET: Record<string, string> = {
@@ -7,13 +10,18 @@ const TARGET: Record<string, string> = {
   ko: "ko",
 };
 
+const TRANSLATE_HOSTS = new Set([
+  "translate.googleapis.com",
+  "api.mymemory.translated.net",
+]);
+
 function stripCtrl(value: string) {
   return value.replace(/[\u0000-\u001F]/g, "").trim();
 }
 
 export async function translateTitles(titles: string[], locale: string): Promise<string[]> {
   const tl = TARGET[locale] ?? "en";
-  return Promise.all(titles.map((title) => translateOne(title, tl)));
+  return Promise.all(titles.slice(0, 16).map((title) => translateOne(title, tl)));
 }
 
 async function translateOne(text: string, tl: string): Promise<string> {
@@ -23,12 +31,12 @@ async function translateOne(text: string, tl: string): Promise<string> {
   const clipped = stripCtrl(text).slice(0, 200);
   const translated =
     (await viaGoogle(clipped, tl)) || (await viaMemory(clipped, tl)) || text;
-  cache.set(key, translated);
+  cache.set(key, stripTags(translated).slice(0, 240));
   if (cache.size > 400) {
     const first = cache.keys().next().value;
     if (first) cache.delete(first);
   }
-  return translated;
+  return cache.get(key) ?? text;
 }
 
 async function viaGoogle(text: string, tl: string): Promise<string | null> {
@@ -38,7 +46,7 @@ async function viaGoogle(text: string, tl: string): Promise<string | null> {
     "&dt=t&q=" +
     encodeURIComponent(text);
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const res = await outbound(url, TRANSLATE_HOSTS, { timeout: 5000 });
     if (!res.ok) return null;
     const json = (await res.json()) as unknown;
     if (!Array.isArray(json) || !Array.isArray(json[0])) return null;
@@ -59,7 +67,7 @@ async function viaMemory(text: string, tl: string): Promise<string | null> {
     "&langpair=" +
     encodeURIComponent(pair);
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const res = await outbound(url, TRANSLATE_HOSTS, { timeout: 5000 });
     if (!res.ok) return null;
     const json = (await res.json()) as { responseData?: { translatedText?: string } };
     const out = json.responseData?.translatedText?.trim();

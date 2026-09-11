@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { safeName, safeSymbol } from "@/lib/safe";
 import type { WatchItem } from "./types";
 
 export type SavedList = {
@@ -44,19 +45,27 @@ export const saveWatchlist = createServerFn({ method: "POST" })
     z.object({
       id: z.string().uuid().optional(),
       name: z.string().min(1).max(40),
-      items: z.array(itemSchema).max(200),
+      items: z.array(itemSchema).max(2000),
       selected: z.string().max(32).regex(/^[A-Za-z0-9.^%=_/-]*$/).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
+    const name = safeName(data.name, "リスト").slice(0, 40);
+    const items = data.items
+      .map((item) => ({
+        ...item,
+        symbol: safeSymbol(item.symbol) ?? "",
+        name: safeName(item.name, item.symbol).slice(0, 80),
+      }))
+      .filter((item) => item.symbol);
     const id = data.id ?? crypto.randomUUID();
-    const payload = JSON.stringify(data.items);
-    const selected = data.selected ?? data.items[0]?.symbol ?? "";
+    const payload = JSON.stringify(items);
+    const selected = safeSymbol(data.selected ?? "") ?? items[0]?.symbol ?? "";
     await sql`
       insert into watchlists (id, user_id, name, items, selected, updated_at)
-      values (${id}, ${context.userId}, ${data.name}, ${payload}, ${selected}, now())
+      values (${id}, ${context.userId}, ${name}, ${payload}, ${selected}, now())
       on conflict (id) do update
         set name = excluded.name,
             items = excluded.items,

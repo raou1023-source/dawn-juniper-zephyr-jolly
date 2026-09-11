@@ -86,7 +86,15 @@ function DeskShell() {
   const quotesQ = useQuery({
     queryKey: ["quotes", symbolsKey],
     enabled: watchlist.length > 0,
-    queryFn: () => getQuotes({ data: { symbols: symbolsKey } }),
+    queryFn: async () => {
+      const codes = watchlist.map((w) => w.symbol);
+      const rows: QuoteMeta[] = [];
+      for (let i = 0; i < codes.length; i += 40) {
+        const batch = codes.slice(i, i + 40).join(",");
+        rows.push(...(await getQuotes({ data: { symbols: batch } })));
+      }
+      return rows;
+    },
     staleTime: streamLive ? 2_000 : 60_000,
     refetchInterval: streamLive ? quoteMs : false,
     placeholderData: keepPreviousData,
@@ -222,9 +230,9 @@ function DeskShell() {
               <WatchlistPanel quotes={quotes} />
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-40">
-              <div id="kabu-chart" className="scroll-mt-0">
-                <div className="sticky top-0 z-20 border-b border-border bg-bg/95 px-4 py-2 backdrop-blur-sm md:px-6">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(6.75rem+env(safe-area-inset-bottom))] md:pb-[calc(4.75rem+env(safe-area-inset-bottom))]">
+              <div id="kabu-chart" className="flex min-h-0 flex-1 flex-col">
+                <div className="shrink-0 border-b border-border bg-bg px-4 py-2 md:px-6">
                   <div
                     className="flex flex-wrap items-end justify-between gap-3 touch-pan-y select-none"
                     onPointerDown={swipe.onPointerDown}
@@ -270,7 +278,7 @@ function DeskShell() {
                     ))}
                   </div>
                 </div>
-                <div className="relative h-[38vh] min-h-56 shrink-0 bg-surface">
+                <div className="relative min-h-[220px] flex-1 bg-surface">
                 {!selected ? (
                   <Empty msg={t("addWatchFirst")} />
                 ) : chartQ.isLoading && !candles.length ? (
@@ -296,15 +304,12 @@ function DeskShell() {
               </div>
               </div>
               {selected ? (
-                <>
-                  <FundamentalsPanel
-                    symbol={selected}
-                    currency={meta?.currency}
-                    week52High={meta?.week52High}
-                    week52Low={meta?.week52Low}
-                  />
-                  <div className="h-8 shrink-0" aria-hidden />
-                </>
+                <FundamentalsPanel
+                  symbol={selected}
+                  currency={meta?.currency}
+                  week52High={meta?.week52High}
+                  week52Low={meta?.week52Low}
+                />
               ) : null}
             </div>
           )}
@@ -378,10 +383,13 @@ function ChartAsOf({
       : t("asOfBoth", { t: market, z: t(zoneLabelKey(zone)), j: fmt("Asia/Tokyo") });
   const kind = liveKind(symbol);
   const alwaysOn = kind === "fx" || kind === "crypto";
+  const prev = candles.length >= 2 ? candles[candles.length - 2]!.time : last.time;
+  const barSec = Math.max(60, last.time - prev);
+  const closed = alwaysOn ? false : barSec >= 20 * 3600 ? age > 3 * 86400 : age > 2 * 3600;
   return (
     <p className="mt-1 text-[11px] text-faint">
       {stamp}
-      {!alwaysOn && age > 2 * 3600
+      {closed
         ? ` · ${t("sessionClosed")}`
         : age > 8 * 60 && age < 45 * 60
           ? ` · ${t("feedDelay")}`
@@ -392,7 +400,7 @@ function ChartAsOf({
 
 function Empty({ msg }: { msg: string }) {
   return (
-    <div className="flex h-full min-h-72 items-center justify-center text-sm text-muted">
+    <div className="flex h-full min-h-0 items-center justify-center text-sm text-muted">
       {msg}
     </div>
   );

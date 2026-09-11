@@ -1,26 +1,27 @@
 import { sampleChart } from "./sample";
 import { chartTimezone, classify, mergeHits, quoteAliases, searchCatalog } from "./catalog";
 import { sanitizeCandles } from "./ohlc";
-import type { Candle, ChartPayload, QuoteMeta, SearchHit } from "./types";
+import { outbound } from "./outbound";
+import type { Candle, ChartPayload, Fundamentals, QuoteMeta, SearchHit } from "./types";
+
+const COOKIE_VAL = /^[\w.~+/=&%-]{1,512}$/;
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
+const YAHOO_HOSTS = new Set([
+  "query1.finance.yahoo.com",
+  "query2.finance.yahoo.com",
+  "finance.yahoo.com",
+]);
+
 async function yahooJson(url: string): Promise<unknown> {
-  const parsed = new URL(url);
-  if (
-    parsed.protocol !== "https:" ||
-    !/^query[12]\.finance\.yahoo\.com$/.test(parsed.hostname)
-  ) {
-    throw new Error("blocked");
-  }
-  const res = await fetch(parsed.href, {
+  const res = await outbound(url, YAHOO_HOSTS, {
     headers: {
       "User-Agent": UA,
       Accept: "application/json",
     },
-    redirect: "error",
-    signal: AbortSignal.timeout(8000),
+    timeout: 8000,
   });
   if (!res.ok) throw new Error(`yahoo ${res.status}`);
   return res.json();
@@ -252,7 +253,7 @@ export async function searchYahoo(query: string): Promise<SearchHit[]> {
         kind: classify(row.symbol, type, row.exchDisp || row.exchange),
       });
     }
-    return mergeHits(hits, searchCatalog(q));
+    return mergeHits(hits, searchCatalog(q), q);
   } catch {
     return localSearch(q);
   }
@@ -412,10 +413,15 @@ type YahooSession = { cookie: string; crumb: string; at: number };
 let session: YahooSession | null = null;
 
 function cookieFrom(res: Response, prev = "") {
+  const keep = new Set(["A1", "A3", "A1S", "GUC"]);
   const jar = new Map<string, string>();
   for (const part of prev.split(";").map((s) => s.trim()).filter(Boolean)) {
     const i = part.indexOf("=");
-    if (i > 0) jar.set(part.slice(0, i), part.slice(i + 1));
+    if (i > 0) {
+      const k = part.slice(0, i);
+      const v = part.slice(i + 1);
+      if (keep.has(k) && COOKIE_VAL.test(v)) jar.set(k, v);
+    }
   }
   const raw =
     typeof res.headers.getSetCookie === "function"
@@ -427,29 +433,40 @@ function cookieFrom(res: Response, prev = "") {
     const pair = line.split(";")[0] ?? "";
     if (/[\r\n]/.test(pair)) continue;
     const i = pair.indexOf("=");
-    if (i > 0) jar.set(pair.slice(0, i), pair.slice(i + 1));
+    if (i <= 0) continue;
+    const k = pair.slice(0, i);
+    if (!keep.has(k) || !COOKIE_VAL.test(pair.slice(i + 1))) continue;
+    jar.set(k, pair.slice(i + 1));
   }
   return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
+const SESSION_HOSTS = new Set(["fc.yahoo.com", "query1.finance.yahoo.com", "query2.finance.yahoo.com"]);
+
 async function yahooSession(): Promise<YahooSession> {
   if (session && Date.now() - session.at < 25 * 60_000) return session;
-  const page = await fetch("https://finance.yahoo.com/quote/AAPL", {
-    headers: { "User-Agent": UA, Accept: "text/html" },
-    signal: AbortSignal.timeout(10000),
-  });
-  let cookie = cookieFrom(page);
-  const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+  let cookie = "";
+  try {
+    const boot = await outbound("https://fc.yahoo.com/", SESSION_HOSTS, {
+      headers: { "User-Agent": UA, Accept: "*/*" },
+      timeout: 8000,
+      redirect: "manual",
+    });
+    cookie = cookieFrom(boot);
+  } catch {
+    /* crumb may still work */
+  }
+  const crumbRes = await outbound("https://query1.finance.yahoo.com/v1/test/getcrumb", SESSION_HOSTS, {
     headers: {
       "User-Agent": UA,
       Accept: "text/plain",
-      Cookie: cookie,
+      ...(cookie ? { Cookie: cookie } : {}),
     },
-    signal: AbortSignal.timeout(8000),
+    timeout: 8000,
   });
   cookie = cookieFrom(crumbRes, cookie);
   const crumb = (await crumbRes.text()).trim();
-  if (!crumb || crumb.startsWith("{") || crumb.length > 80) {
+  if (!crumb || crumb.startsWith("{") || crumb.length > 80 || /too many/i.test(crumb)) {
     throw new Error("crumb");
   }
   session = { cookie, crumb, at: Date.now() };
@@ -461,19 +478,18 @@ async function yahooAuthedJson(pathAndQuery: string): Promise<unknown> {
     throw new Error("blocked");
   }
   const auth = await yahooSession();
-  const url =
-    "https://query1.finance.yahoo.com" +
-    pathAndQuery +
-    (pathAndQuery.includes("?") ? "&" : "?") +
-    "crumb=" +
-    encodeURIComponent(auth.crumb);
-  const res = await fetch(url, {
+  const url = new URL("https://query1.finance.yahoo.com" + pathAndQuery);
+  if (url.hostname !== "query1.finance.yahoo.com") throw new Error("blocked");
+  if (url.username || url.password) throw new Error("blocked");
+  if (!url.pathname.startsWith("/v10/finance/quoteSummary/")) throw new Error("blocked");
+  url.searchParams.set("crumb", auth.crumb);
+  const res = await outbound(url.href, YAHOO_HOSTS, {
     headers: {
       "User-Agent": UA,
-      Accept: "*/*",
+      Accept: "application/json",
       Cookie: auth.cookie,
     },
-    signal: AbortSignal.timeout(10000),
+    timeout: 10000,
   });
   if (res.status === 401) {
     session = null;
@@ -492,6 +508,13 @@ export async function fetchFundamentals(symbol: string) {
   const key = symbol.toUpperCase();
   const hit = fundCache.get(key);
   if (hit && Date.now() - hit.at < 15 * 60_000) return hit.data;
+  const quote = quoteCache.get(key);
+  const chart = [...chartCache.values()].find((c) => c.meta.symbol.toUpperCase() === key);
+  const fallback: Fundamentals = {
+    symbol,
+    week52High: quote?.week52High ?? chart?.meta.week52High,
+    week52Low: quote?.week52Low ?? chart?.meta.week52Low,
+  };
   try {
     const json = (await yahooAuthedJson(
       `/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
@@ -501,7 +524,6 @@ export async function fetchFundamentals(symbol: string) {
     const ks = row?.defaultKeyStatistics;
     const sd = row?.summaryDetail;
     const fd = row?.financialData;
-    const chart = [...chartCache.values()].find((c) => c.meta.symbol.toUpperCase() === key);
     const data = {
       symbol,
       per: num(ks?.trailingPE) ?? num(sd?.trailingPE),
@@ -512,16 +534,14 @@ export async function fetchFundamentals(symbol: string) {
       payout: num(sd?.payoutRatio),
       marketCap: num(sd?.marketCap),
       roe: num(fd?.returnOnEquity),
-      week52High: num(sd?.fiftyTwoWeekHigh) ?? chart?.meta.dayHigh,
-      week52Low: num(sd?.fiftyTwoWeekLow) ?? chart?.meta.dayLow,
+      week52High: num(sd?.fiftyTwoWeekHigh) ?? fallback.week52High,
+      week52Low: num(sd?.fiftyTwoWeekLow) ?? fallback.week52Low,
     };
-    const hasValue = [data.per, data.pbr, data.eps, data.dividendRate, data.marketCap].some(
-      (n) => n != null,
-    );
-    if (hasValue) fundCache.set(key, { at: Date.now(), data });
+    fundCache.set(key, { at: Date.now(), data });
     return data;
   } catch {
-    return hit?.data ?? { symbol };
+    fundCache.set(key, { at: Date.now(), data: fallback });
+    return fallback;
   }
 }
 

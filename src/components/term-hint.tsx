@@ -68,7 +68,9 @@ export function TermHint({ label, hint }: Props) {
         type="button"
         aria-expanded={open}
         aria-controls={id}
-        onClick={() => {
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           setOpen((v) => {
             const next = !v;
             if (next) window.dispatchEvent(new CustomEvent(OPEN, { detail: id }));

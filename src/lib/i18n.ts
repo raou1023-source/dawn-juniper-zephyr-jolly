@@ -20,7 +20,7 @@ const JA = {
   tabNews: "ニュース",
   tabWatch: "ウォッチ",
   watch: "ウォッチ",
-  watchHint: "{n} 銘柄 · 下のバーから追加",
+  watchHint: "{n} 銘柄 · 長押しで並べ替え",
   watchEmpty: "下部の検索バーから銘柄を追加できます。",
   pickSymbol: "銘柄を選択",
   prevSymbol: "前の銘柄",
@@ -108,7 +108,7 @@ const JA = {
   liveOn: "LIVE",
   liveOff: "停止",
   liveAlways: "常時LIVE",
-  live3s: "3秒更新",
+  live3s: "5秒更新",
   updating: "更新中",
   search: "検索",
   searchPh: "銘柄・金・ドル円・BTC・国債を検索",
@@ -172,6 +172,15 @@ const JA = {
   kind_fx: "為替",
   kind_crypto: "暗号",
   kind_bond: "債券",
+  group_jp: "国内",
+  group_overseas: "海外",
+  group_index: "指数",
+  group_fx: "為替",
+  group_etf: "ETF",
+  group_fund: "投信",
+  group_commodity: "商品",
+  group_crypto: "暗号",
+  group_bond: "債券",
 } as const;
 
 type Dict = { [K in keyof typeof JA]: string };
@@ -182,7 +191,7 @@ const EN: Dict = {
   tabNews: "News",
   tabWatch: "Watchlist",
   watch: "Watchlist",
-  watchHint: "{n} symbols · add from the bar below",
+  watchHint: "{n} symbols · long-press to reorder",
   watchEmpty: "Add symbols from the search bar at the bottom.",
   pickSymbol: "Select a symbol",
   prevSymbol: "Previous symbol",
@@ -270,7 +279,7 @@ const EN: Dict = {
   liveOn: "LIVE",
   liveOff: "Paused",
   liveAlways: "Always LIVE",
-  live3s: "3s refresh",
+  live3s: "5s refresh",
   updating: "Updating",
   search: "Search",
   searchPh: "Search stocks, gold, USD/JPY, BTC, bonds",
@@ -334,6 +343,15 @@ const EN: Dict = {
   kind_fx: "FX",
   kind_crypto: "Crypto",
   kind_bond: "Bond",
+  group_jp: "Japan",
+  group_overseas: "Overseas",
+  group_index: "Index",
+  group_fx: "FX",
+  group_etf: "ETF",
+  group_fund: "Funds",
+  group_commodity: "Commodities",
+  group_crypto: "Crypto",
+  group_bond: "Bonds",
 };
 
 const ZH: Dict = {
@@ -342,7 +360,7 @@ const ZH: Dict = {
   tabNews: "新闻",
   tabWatch: "自选",
   watch: "自选",
-  watchHint: "{n} 只 · 用底部栏添加",
+  watchHint: "{n} 只 · 长按可排序",
   watchEmpty: "请用底部搜索栏添加标的。",
   pickSymbol: "请选择标的",
   prevSymbol: "上一个",
@@ -430,7 +448,7 @@ const ZH: Dict = {
   liveOn: "LIVE",
   liveOff: "暂停",
   liveAlways: "持续LIVE",
-  live3s: "3秒刷新",
+  live3s: "5秒刷新",
   updating: "更新中",
   search: "搜索",
   searchPh: "搜索股票、黄金、美元日元、BTC、国债",
@@ -493,6 +511,15 @@ const ZH: Dict = {
   kind_fx: "外汇",
   kind_crypto: "加密",
   kind_bond: "债券",
+  group_jp: "国内",
+  group_overseas: "海外",
+  group_index: "指数",
+  group_fx: "外汇",
+  group_etf: "ETF",
+  group_fund: "基金",
+  group_commodity: "商品",
+  group_crypto: "加密",
+  group_bond: "债券",
 };
 
 const KO: Dict = {
@@ -501,7 +528,7 @@ const KO: Dict = {
   tabNews: "뉴스",
   tabWatch: "관심",
   watch: "관심종목",
-  watchHint: "{n}종 · 아래 바에서 추가",
+  watchHint: "{n}종 · 길게 눌러 순서 변경",
   watchEmpty: "아래 검색바로 종목을 추가하세요.",
   pickSymbol: "종목을 선택하세요",
   prevSymbol: "이전 종목",
@@ -589,7 +616,7 @@ const KO: Dict = {
   liveOn: "LIVE",
   liveOff: "중지",
   liveAlways: "항상 LIVE",
-  live3s: "3초 갱신",
+  live3s: "5초 갱신",
   updating: "갱신 중",
   search: "검색",
   searchPh: "종목·금·달러엔·BTC·국채 검색",
@@ -653,6 +680,15 @@ const KO: Dict = {
   kind_fx: "환율",
   kind_crypto: "암호",
   kind_bond: "채권",
+  group_jp: "국내",
+  group_overseas: "해외",
+  group_index: "지수",
+  group_fx: "환율",
+  group_etf: "ETF",
+  group_fund: "펀드",
+  group_commodity: "원자재",
+  group_crypto: "암호",
+  group_bond: "채권",
 };
 
 const TABLES: Record<Locale, Dict> = { ja: JA, en: EN, zh: ZH, ko: KO };
@@ -686,6 +722,11 @@ export function translate(
 export function kindKey(kind: string): MsgKey {
   const key = `kind_${kind}` as MsgKey;
   return key in TABLES.ja ? key : "kind_overseas";
+}
+
+export function groupKey(kind: string): MsgKey {
+  const key = `group_${kind}` as MsgKey;
+  return key in TABLES.ja ? key : "group_overseas";
 }
 
 export function periodKey(key: string): MsgKey {
